@@ -27,7 +27,7 @@ jobs:
       - name: Publish to public repo
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}  # contents:write on the public repo only
-          REPO: your-org/shared-allowed-versions
+          REPO: judyanndixon/shared-allowed-versions
         run: |
           set -euo pipefail
           current=$(gh api "repos/$REPO/contents/allowed-testrun.txt" 2>/dev/null || echo '{}')
