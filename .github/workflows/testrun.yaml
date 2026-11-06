@@ -39,7 +39,7 @@ jobs:
 
           # Fail closed if the allowed list can't be read
           allowed=$(curl -fsS --retry 3 --max-time 10 \
-            https://raw.githubusercontent.com/your-org/shared-allowed-versions/main/allowed.txt) \
+            https://raw.githubusercontent.com/judyanndixon/shared-allowed-versions/main/allowed.txt) \
             || { echo "::error::Could not read the allowed versions list"; exit 1; }
           [ -n "$allowed" ] || { echo "::error::Allowed versions list is empty"; exit 1; }
 
