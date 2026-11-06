@@ -1,0 +1,89 @@
+name: test run
+
+on:
+  workflow_call:
+    inputs:
+      depth:
+        type: string
+        default: ''
+      auto_exclude:
+        type: string
+        default: ''
+      results:
+        type: string
+        default: ''
+
+jobs:
+  # Runs on a GitHub-hosted runner, NOT the restricted runner group, so it starts
+  # for any SHA. If the pinned version isn't allowed it fails here with a clear
+  # message, and the job below is skipped and never asks the restricted group
+  # for a runner (which is what left runs queued with no error).
+  verify-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}   # needs no token access
+    steps:
+      - name: Require an allowed, SHA-pinned version of this workflow
+        env:
+          WF_SHA: ${{ job.workflow_sha }}
+          WF_REF: ${{ job.workflow_ref }}
+        run: |
+          set -euo pipefail
+
+          # The caller must pin by full SHA, not a tag or branch
+          called="${WF_REF##*@}"
+          if ! [[ "$called" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Pin this workflow to a full 40-char commit SHA (got '$called')"
+            exit 1
+          fi
+
+          # Fail closed if the allowed list can't be read
+          allowed=$(curl -fsS --retry 3 --max-time 10 \
+            https://raw.githubusercontent.com/your-org/shared-allowed-versions/main/allowed.txt) \
+            || { echo "::error::Could not read the allowed versions list"; exit 1; }
+          [ -n "$allowed" ] || { echo "::error::Allowed versions list is empty"; exit 1; }
+
+          i=0
+          while read -r sha; do
+            if [ "$sha" = "$WF_SHA" ]; then
+              if [ "$i" -gt 0 ]; then
+                newest=$(head -n1 <<<"$allowed")
+                echo "::warning::This pin is $i version(s) behind. Update to $newest before it is removed from the allowed list."
+                echo "⚠️ Outdated pin. Update to \`$newest\`" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              exit 0
+            fi
+            i=$((i+1))
+          done <<<"$allowed"
+
+          echo "::error::$WF_SHA is not an allowed version of this workflow. Allowed versions:"
+          echo "$allowed"
+          {
+            echo "### ❌ Workflow version not allowed"
+            echo "Pinned: \`$WF_SHA\`"
+            echo "Update the caller to one of:"
+            echo '```'
+            echo "$allowed"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  testrun:
+    needs: verify-version
+    runs-on:
+      group: test-group
+      labels: testgroup
+    # Under the runner's 6-hour execution timeout, with time left to upload.
+    timeout-minutes: 330
+    permissions:
+      contents: read          
+      actions: read           
+      security-events: write  
+      id-token: write         
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: src
+          fetch-depth: 1
+          persist-credentials: false  
