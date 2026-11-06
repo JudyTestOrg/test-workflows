@@ -17,7 +17,7 @@ jobs:
   # Runs on a GitHub-hosted runner, NOT the restricted runner group, so it starts
   # for any SHA. If the pinned version isn't allowed it fails here with a clear
   # message, and the job below is skipped and never asks the restricted group
-  # for a runner (which is what left runs queued with no errors).
+  # for a runner (which is what left runs queued with no error).
   verify-version:
     runs-on: ubuntu-latest
     timeout-minutes: 5
