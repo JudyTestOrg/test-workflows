@@ -1,0 +1,44 @@
+name: Sync allowed versions
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/testrun.yml]
+  workflow_dispatch:
+
+concurrency: sync-allowed   # serialize runs so an older one can't overwrite a newer one
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute 3 latest versions of scan.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/commits?sha=main&path=.github/workflows/testrun.yml&per_page=3" \
+            --jq '.[].sha' > allowed-testrun.txt
+          [ -s allowed-testrun.txt ] || { echo "::error::No commits found"; exit 1; }
+          cat allowed-testrun.txt
+
+      - name: Publish to public repo
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}  # contents:write on the public repo only
+          REPO: your-org/shared-allowed-versions
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$REPO/contents/allowed-testrun.txt" 2>/dev/null || echo '{}')
+          sha=$(jq -r '.sha // empty' <<<"$current")
+          old=$(jq -r '.content // empty' <<<"$current" | base64 -d 2>/dev/null || true)
+
+          if [ "$old" = "$(cat allowed-testrun.txt)" ]; then
+            echo "No change"; exit 0
+          fi
+
+          gh api -X PUT "repos/$REPO/contents/allowed-testrun.txt" \
+            -f message="Update allowed versions (${{ github.sha }})" \
+            -f content="$(base64 -w0 allowed-testrun.txt)" \
+            ${sha:+-f sha="$sha"}
